@@ -19,6 +19,7 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "17"
+          cache: "maven"
 
       - name: Build, test, and package
         run: mvn clean package
@@ -29,9 +30,10 @@ jobs:
           name: spring-boot-demo
           path: target/*.jar
 
-  consume-artifact:
+  deploy:
     runs-on: ubuntu-latest
     needs: build
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Download build artifact
@@ -39,5 +41,10 @@ jobs:
         with:
           name: spring-boot-demo
 
-      - name: List downloaded files
+      - name: Verify artifact
         run: ls -l
+
+      - name: Run application (simulate deploy)
+        run: |
+          java -jar *.jar &
+          sleep 20
