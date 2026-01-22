@@ -43,18 +43,58 @@ jobs:
         with:
           name: spring-boot-demo
 
-      - name: Copy JAR to EC2
+      - name: Prepare SSH key
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
+      - name: Copy JAR to EC2
+        run: |
           scp -i key.pem -o StrictHostKeyChecking=no \
-            app.jar ubuntu@${{ secrets.EC2_HOST }}:/opt/spring-app/
+            app.jar ubuntu@${{ secrets.EC2_HOST }}:/opt/spring-app/app.jar.new
           
-      - name: Restart application on EC2
+      - name: Deploy with health check and rollback
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no \
           ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
+
+            APP_DIR=/opt/spring-app
+            HEALTH_URL=http://localhost:8080/actuator/health
+
+            cd $APP_DIR
+
+            echo "Backing up current version..."
+            if [ -f app.jar ]; then
+              cp app.jar app.jar.bak
+            fi
+
+            echo "Activating new version..."
+            mv app.jar.new app.jar
+
+            echo "Restarting service..."
             sudo systemctl restart spring-app
-            sudo systemctl status spring-app --no-pager
+
+            echo "Waiting for application to become healthy..."
+            sleep 10
+
+            for i in {1..6}; do
+              if curl -sf $HEALTH_URL | grep -q '"UP"'; then
+                echo "Application is healthy"
+                exit 0
+              fi
+              echo "Not healthy yet, retrying..."
+              sleep 5
+            done
+
+            echo "Health check failed — rolling back"
+            if [ -f app.jar.bak ]; then
+              mv app.jar.bak app.jar
+              sudo systemctl restart spring-app
+              echo "Rollback completed"
+            else
+              echo "No backup found, rollback not possible"
+            fi
+
+            exit 1
           EOF
