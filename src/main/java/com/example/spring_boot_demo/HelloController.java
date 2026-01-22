@@ -9,7 +9,7 @@ public class HelloController {
 
     @GetMapping("/")
     public String home() {
-        return "Spring Boot app is running on EC2";
+        return "Spring Boot app is running on EC2 deployed through github actions!";
     }
 
     @GetMapping("/hello")
