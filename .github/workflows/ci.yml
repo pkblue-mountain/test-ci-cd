@@ -65,9 +65,7 @@ jobs:
             cd $APP_DIR
 
             echo "Backing up current version..."
-            if [ -f app.jar ]; then
-              cp app.jar app.jar.bak
-            fi
+            [ -f app.jar ] && cp app.jar app.jar.bak
 
             echo "Activating new version..."
             mv app.jar.new app.jar
@@ -78,23 +76,22 @@ jobs:
             echo "Waiting for application to become healthy..."
             sleep 10
 
+            HEALTHY=false
             for i in {1..6}; do
               if curl -sf $HEALTH_URL | grep -q '"UP"'; then
-                echo "Application is healthy"
-                exit 0
+                HEALTHY=true
+                break
               fi
               echo "Not healthy yet, retrying..."
               sleep 5
             done
 
-            echo "Health check failed — rolling back"
-            if [ -f app.jar.bak ]; then
-              mv app.jar.bak app.jar
-              sudo systemctl restart spring-app
-              echo "Rollback completed"
+            if [ "$HEALTHY" = true ]; then
+              echo "Application is healthy"
             else
-              echo "No backup found, rollback not possible"
+              echo "Health check failed — rolling back"
+              [ -f app.jar.bak ] && mv app.jar.bak app.jar
+              sudo systemctl restart spring-app
+              exit 1
             fi
-
-            exit 1
           EOF
